@@ -64,7 +64,7 @@ uint16_t toMorse(char *input, int8_t *&resultHead)
         --result;
         --index;
 
-        *result = MorseTiming::INTER_WORD;
+        *result = MorseTiming::INTER_LETTER;
         ++index;
         ++result;
     }
