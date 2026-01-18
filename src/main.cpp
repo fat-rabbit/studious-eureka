@@ -1,71 +1,73 @@
 #include <Arduino.h>
+#include <morse.h>
 
-enum BlinkMode
-{
-  ModeFast,
-  ModeSlow
-};
+constexpr uint8_t DEBUG_LED_PIN = 16;
+constexpr uint8_t BUTTON_PIN = 3;
+constexpr uint32_t INTERVAL_MS = 500;
+constexpr uint32_t DEBOUNCE_MS = 50;
 
-const unsigned long DEBOUNCE_DELAY = 50;
-
-unsigned long lastChangeTime = 0;
-unsigned long lastDebounceTime = 0;
-uint16_t intervalMs = 300;
-BlinkMode currentMode = ModeFast;
-
-const uint8_t RED_LED_PIN = 6;
-const uint8_t BLUE_LED_PIN = 41;
-const uint8_t BUTTON_PIN = 3;
-const uint8_t BOOT_BUTTON_PIN = 0;
-
-uint8_t lastButtonState = HIGH;
-uint8_t lastBootButtonState = HIGH;
+int8_t *phraseCursor = nullptr;
+int8_t *phraseStart = nullptr;
+uint32_t lastChangeTime = 0;
+uint32_t currentDelayMs = 100;
+uint16_t totalSignals = 0;
+uint16_t remainingSignals = 0;
 
 void setup()
 {
-  // Serial.begin(9600);
-  pinMode(RED_LED_PIN, OUTPUT);
-  pinMode(BLUE_LED_PIN, OUTPUT);
-
+  Serial.begin(9600);
+  pinMode(DEBUG_LED_PIN, OUTPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+
+  totalSignals = toMorse("Hello, World!", phraseStart);
+  phraseCursor = phraseStart;
+  remainingSignals = totalSignals;
 }
 
 void loop()
 {
-  unsigned long currentTime = millis();
+  const uint32_t currentTime = millis();
 
-  int currentButton = digitalRead(BUTTON_PIN);
-  int currentBoot = digitalRead(BOOT_BUTTON_PIN);
+  static uint32_t lastDebounceTime = 0;
+  static uint8_t lastButtonState = HIGH;
 
-  if (currentButton == LOW && lastButtonState == HIGH)
+  const uint8_t currentButton = digitalRead(BUTTON_PIN);
+  if (currentButton != lastButtonState)
   {
-    if (currentTime - lastDebounceTime > DEBOUNCE_DELAY)
+    if (currentTime - lastDebounceTime > DEBOUNCE_MS)
     {
-      currentMode = ModeFast;
-      intervalMs = 300;
+      if (currentButton == LOW)
+      {
+        // Start transmitting over
+        phraseCursor = phraseStart;
+        remainingSignals = totalSignals;
+        currentDelayMs = 0;
+      }
       lastDebounceTime = currentTime;
+      lastButtonState = currentButton;
     }
   }
-  lastButtonState = currentButton;
 
-  if (currentBoot == LOW && lastBootButtonState == HIGH)
+  if (remainingSignals > 0 && (currentTime - lastChangeTime >= currentDelayMs))
   {
-    if (currentTime - lastDebounceTime > DEBOUNCE_DELAY)
+    const int8_t signalTU = *phraseCursor;
+
+    if (signalTU > 0)
     {
-      currentMode = ModeSlow;
-      intervalMs = 900;
-      lastDebounceTime = currentTime;
+      digitalWrite(DEBUG_LED_PIN, HIGH);
+      currentDelayMs = (uint32_t)signalTU * INTERVAL_MS;
     }
-  }
-  lastBootButtonState = currentBoot;
+    else
+    {
+      digitalWrite(DEBUG_LED_PIN, LOW);
+      currentDelayMs = (uint32_t)abs(signalTU) * INTERVAL_MS;
+    }
 
-  if (currentTime - lastChangeTime >= intervalMs)
-  {
     lastChangeTime = currentTime;
+    phraseCursor++;
+    remainingSignals--;
 
-    bool isRedOn = digitalRead(RED_LED_PIN);
-    digitalWrite(RED_LED_PIN, !isRedOn);
-    digitalWrite(BLUE_LED_PIN, isRedOn);
+    if (remainingSignals == 0)
+      digitalWrite(DEBUG_LED_PIN, LOW);
   }
 }
