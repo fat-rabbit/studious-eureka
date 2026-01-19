@@ -1,71 +1,60 @@
 #include <Arduino.h>
 
-enum BlinkMode
+enum LedState
 {
-  ModeFast,
-  ModeSlow
+  ON,
+  OFF
 };
 
-const unsigned long DEBOUNCE_DELAY = 50;
+unsigned long lastRead_timestamp = 0;
+unsigned long lastPressed_timestamp = 0;
 
-unsigned long lastChangeTime = 0;
-unsigned long lastDebounceTime = 0;
-uint16_t intervalMs = 300;
-BlinkMode currentMode = ModeFast;
+constexpr uint8_t ACD_PIN = 13;
+constexpr uint8_t BUTTON_PIN = 8;
+constexpr uint8_t LED_PIN = 17;
 
-const uint8_t RED_LED_PIN = 6;
-const uint8_t BLUE_LED_PIN = 41;
-const uint8_t BUTTON_PIN = 3;
-const uint8_t BOOT_BUTTON_PIN = 0;
+constexpr uint8_t intervalMs = 50;
+constexpr uint8_t debounceMs = 50;
 
-uint8_t lastButtonState = HIGH;
-uint8_t lastBootButtonState = HIGH;
+uint8_t buttonState = LOW;
+LedState ledState = ON;
 
 void setup()
 {
-  // Serial.begin(9600);
-  pinMode(RED_LED_PIN, OUTPUT);
-  pinMode(BLUE_LED_PIN, OUTPUT);
-
+  Serial.begin(9600);
+  pinMode(ACD_PIN, ANALOG);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
 }
 
 void loop()
 {
-  unsigned long currentTime = millis();
+  ulong current_timestamp = millis();
+  uint8_t current_button_state = digitalRead(BUTTON_PIN);
 
-  int currentButton = digitalRead(BUTTON_PIN);
-  int currentBoot = digitalRead(BOOT_BUTTON_PIN);
-
-  if (currentButton == LOW && lastButtonState == HIGH)
+  if (current_timestamp - lastRead_timestamp >= intervalMs)
   {
-    if (currentTime - lastDebounceTime > DEBOUNCE_DELAY)
-    {
-      currentMode = ModeFast;
-      intervalMs = 300;
-      lastDebounceTime = currentTime;
-    }
+    uint16_t analogSignal = analogRead(ACD_PIN);
+    Serial.println(analogSignal);
+    lastRead_timestamp = current_timestamp;
   }
-  lastButtonState = currentButton;
 
-  if (currentBoot == LOW && lastBootButtonState == HIGH)
+  if (current_timestamp - lastPressed_timestamp >= debounceMs)
   {
-    if (currentTime - lastDebounceTime > DEBOUNCE_DELAY)
+    if (current_button_state == LOW && buttonState == HIGH)
     {
-      currentMode = ModeSlow;
-      intervalMs = 900;
-      lastDebounceTime = currentTime;
+      Serial.println("Turn Off the Led");
+      ledState = OFF;
+      digitalWrite(LED_PIN, LOW);
     }
-  }
-  lastBootButtonState = currentBoot;
-
-  if (currentTime - lastChangeTime >= intervalMs)
-  {
-    lastChangeTime = currentTime;
-
-    bool isRedOn = digitalRead(RED_LED_PIN);
-    digitalWrite(RED_LED_PIN, !isRedOn);
-    digitalWrite(BLUE_LED_PIN, isRedOn);
+    else if (current_button_state == HIGH && buttonState == LOW)
+    {
+      Serial.println("Turn On the Led");
+      ledState = ON;
+      digitalWrite(LED_PIN, HIGH);
+    }
+    buttonState = current_button_state;
+    lastPressed_timestamp = current_timestamp;
   }
 }
